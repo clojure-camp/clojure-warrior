@@ -5,19 +5,30 @@
 
 (deftest get-warrior
   (testing "get-warrior"
-    (is (= {:type :warrior
-            :position [2 0]}
-           (state/get-warrior [[{} {} {:type :warrior}]])))))
+    (is (= {:unit/type :unit.type/warrior
+            :unit/position [2 0]}
+           (state/get-warrior [[{} {} {:unit/type :unit.type/warrior}]])))))
 
 (deftest get-stairs
   (testing "get-stairs"
-    (is (= {:type :stairs
-            :position [2 0]}
-           (state/get-stairs [[{} {} {:type :stairs}]])))))
+    (is (= {:unit/type :unit.type/stairs
+            :unit/position [2 0]}
+           (state/get-stairs [[{} {} {:unit/type :unit.type/stairs}]])))))
 
 (deftest unit-at-position
   (testing "unit-at-position"
-    (is (= {:type :warrior
-            :position [0 0]}
-           (state/unit-at-position [[{:type :warrior}]] [0 0])))))
+    (is (= {:unit/type :unit.type/warrior
+            :unit/position [0 0]}
+           (state/unit-at-position [[{:unit/type :unit.type/warrior}]] [0 0])))))
 
+(deftest add-message
+  (testing "wraps strings as system messages"
+    (is (= {:state/messages [{:message/type :message.type/system
+                              :message/text "hello"}]}
+           (state/add-message {:state/messages []} "hello"))))
+
+  (testing "keeps message maps as-is"
+    (is (= {:state/messages [{:message/type :message.type/say
+                              :message/text "hi"}]}
+           (state/add-message {:state/messages []} {:message/type :message.type/say
+                                                    :message/text "hi"})))))

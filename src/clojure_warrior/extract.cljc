@@ -5,19 +5,19 @@
 (defn extract-unit
   "Given space notation from level description,
   returns object type and direction"
-  [s]
-  (if-not s
-    (units/reference :floor)
-    (let [chars (set (seq (name s)))
+  [notation]
+  (if-not notation
+    (:unit.type/floor units/reference)
+    (let [chars (set (seq (name notation)))
           type (or (units/define-char->type (first chars))
-                   (units/define-char->type (last chars)) )
+                   (units/define-char->type (last chars)))
           direction (cond
-                      (contains? chars \>) :east
-                      (contains? chars \<) :west)
-          health (:max-health (units/reference type))]
-      (as-> (units/reference type) m
-        (if direction (assoc m :direction direction) m)
-        (if health (assoc m :health health) m)))))
+                      (contains? chars \>) :direction/east
+                      (contains? chars \<) :direction/west)
+          health (:unit/max-health (units/reference type))]
+      (as-> (units/reference type) unit
+        (if direction (assoc unit :unit/direction direction) unit)
+        (if health (assoc unit :unit/health health) unit)))))
 
 (defn extract-board [board-description]
   (->> board-description
@@ -31,6 +31,7 @@
 
 (defn generate-initial-level-state
   [level-description]
-  {:messages [(str "You enter room " (level-description :id))]
-   :board (extract-board (level-description :board))
-   :tick 0})
+  {:state/messages [{:message/type :message.type/level-start
+                     :message/level level-description}]
+   :state/board (extract-board (:level/board level-description))
+   :state/tick 0})
