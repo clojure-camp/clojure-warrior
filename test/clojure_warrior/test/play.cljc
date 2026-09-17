@@ -32,11 +32,11 @@
                       :state/messages []
                       :state/tick 0}
           users-code (fn [board]
-                       (api/say "health:" 10.0)
+                       (api/say {:health 10.0})
                        [:action/walk :direction/forward])
           end-state (last (play/play-turn init-state users-code))]
       (is (= [{:message/type :message.type/say
-               :message/text "health: 10.0"}
+               :message/text "{:health 10.0}"}
               {:message/type :message.type/system
                :message/text "You walk forward"}]
              (:state/messages end-state))))))

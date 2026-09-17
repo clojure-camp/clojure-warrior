@@ -1,6 +1,5 @@
 (ns clojure-warrior.api
   (:require
-    [clojure.string :as string]
     [clojure-warrior.state :as state]))
 
 (def ^:dynamic *say-listener*
@@ -8,19 +7,11 @@
   nil)
 
 (defn say
-  "Sends args to tap> and, during a game, to the game report"
-  [& args]
+  "Sends value to tap> and, during a game, to the game report"
+  [value]
   (when *say-listener*
-    (*say-listener*
-      (->> args
-           (map (fn [arg]
-                  (if (string? arg)
-                    arg
-                    (pr-str arg))))
-           (string/join " "))))
-  (tap> (if (= 1 (count args))
-          (first args)
-          (vec args)))
+    (*say-listener* (pr-str value)))
+  (tap> value)
   nil)
 
 (defn stairs

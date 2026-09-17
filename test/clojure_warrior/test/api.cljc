@@ -58,11 +58,11 @@
            (api/inspect sample-state [4 0])))))
 
 (deftest say
-  (testing "say sends joined text to *say-listener*"
+  (testing "say sends printed value to *say-listener*"
     (let [collected (atom [])]
       (binding [api/*say-listener* (fn [text]
                                      (swap! collected conj text))]
-        (api/say "health:" 10.0)
+        (api/say "health")
         (api/say {:a 1}))
-      (is (= ["health: 10.0" "{:a 1}"]
+      (is (= ["\"health\"" "{:a 1}"]
              @collected)))))
