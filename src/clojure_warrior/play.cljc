@@ -81,8 +81,9 @@
         new-health (max 0.0 (- (:unit/health warrior) strength))
         health-delta (- (:unit/health warrior) new-health)]
     (-> state
-        (add-message (str "A " (name (:unit/type enemy)) " shoots you"
-                          " and you lose " health-delta " health, down to " new-health))
+        (add-message {:message/type :message.type/enemy-action
+                      :message/text (str "A " (name (:unit/type enemy)) " shoots you"
+                                         " and you lose " health-delta " health, down to " new-health)})
         (assoc-at (:unit/position warrior) :unit/health new-health))))
 
 (defmethod take-enemy-action :action/attack
@@ -92,8 +93,9 @@
         new-health (max 0.0 (- (:unit/health warrior) strength))
         health-delta (- (:unit/health warrior) new-health)]
     (-> state
-        (add-message (str "A " (name (:unit/type enemy)) " attacks you"
-                          " and you lose " health-delta " health, down to " new-health))
+        (add-message {:message/type :message.type/enemy-action
+                      :message/text (str "A " (name (:unit/type enemy)) " attacks you"
+                                         " and you lose " health-delta " health, down to " new-health)})
         (assoc-at (:unit/position warrior) :unit/health new-health))))
 
 (defn store-enemy-action [state enemy action]
