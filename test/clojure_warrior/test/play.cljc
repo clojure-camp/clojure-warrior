@@ -39,7 +39,71 @@
                :message/text "{:health 10.0}"}
               {:message/type :message.type/system
                :message/text "You walk forward"}]
-             (:state/messages end-state))))))
+             (:state/messages end-state)))))
+
+  (testing "bot throws"
+    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
+                                      :unit/health 10.0
+                                      :unit/direction :direction/east}
+                                     {:unit/type :unit.type/floor}]]
+                      :state/messages []
+                      :state/tick 0}
+          users-code (fn [board]
+                       (api/say :before-boom)
+                       (throw (ex-info "boom" {})))
+          states (play/play-turn init-state users-code)
+          end-state (last states)]
+      (is (= 1 (count states)))
+      (is (= true (:state/game-over? end-state)))
+      (is (= 1 (:state/tick end-state)))
+      (is (= (:state/board init-state) (:state/board end-state)))
+      (is (= [{:message/type :message.type/say
+               :message/text ":before-boom"}
+              {:message/type :message.type/error
+               :message/text "Your bot threw an error: boom"}]
+             (:state/messages end-state)))))
+
+  (testing "bot returns an action without a direction"
+    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
+                                      :unit/health 10.0
+                                      :unit/direction :direction/east}
+                                     {:unit/type :unit.type/floor}]]
+                      :state/messages []
+                      :state/tick 0}
+          users-code (fn [board]
+                       [:action/walk])
+          end-state (last (play/play-turn init-state users-code))]
+      (is (= true (:state/game-over? end-state)))
+      (is (= :message.type/error
+             (:message/type (last (:state/messages end-state)))))
+      (is (re-find #"^Invalid action \[:action/walk\]: "
+                   (:message/text (last (:state/messages end-state)))))))
+
+  (testing "bot returns something that is not an action vector"
+    (doseq [action [nil :action/walk "walk" [:action/fly :direction/forward]]]
+      (let [init-state {:state/board [[{:unit/type :unit.type/warrior
+                                        :unit/health 10.0
+                                        :unit/direction :direction/east}
+                                       {:unit/type :unit.type/floor}]]
+                        :state/messages []
+                        :state/tick 0}
+            users-code (fn [board]
+                         action)
+            end-state (last (play/play-turn init-state users-code))]
+        (is (= true (:state/game-over? end-state)))
+        (is (re-find #"must be a vector starting with one of"
+                     (:message/text (last (:state/messages end-state)))))))))
+
+(deftest action-error-text
+  (is (nil? (play/action-error-text [:action/rest])))
+  (is (nil? (play/action-error-text [:action/pivot])))
+  (is (nil? (play/action-error-text [:action/walk :direction/forward])))
+  (is (nil? (play/action-error-text [:action/attack :direction/backward])))
+  (is (nil? (play/action-error-text [:action/shoot :direction/forward])))
+  (is (nil? (play/action-error-text [:action/rescue :direction/backward])))
+  (is (some? (play/action-error-text [:action/rest :direction/forward])))
+  (is (some? (play/action-error-text [:action/walk :direction/north])))
+  (is (some? (play/action-error-text [:action/walk :direction/forward :extra]))))
 
 (deftest start-level
   (testing "start-level"

@@ -1,5 +1,7 @@
 (ns clojure-warrior.play
   (:require
+    [malli.core :as m]
+    [malli.error :as me]
     [clojure-warrior.api :as api]
     [clojure-warrior.extract :as extract]
     [clojure-warrior.state :refer [get-warrior
@@ -7,6 +9,33 @@
                                    assoc-at]]
     [clojure-warrior.unit :refer [take-warrior-action]]
     [clojure-warrior.units :as units]))
+
+(def Direction
+  [:enum :direction/forward :direction/backward])
+
+(def Action
+  [:multi {:dispatch (fn [action]
+                       (when (sequential? action)
+                         (first action)))}
+   [:action/walk [:tuple [:= :action/walk] Direction]]
+   [:action/attack [:tuple [:= :action/attack] Direction]]
+   [:action/shoot [:tuple [:= :action/shoot] Direction]]
+   [:action/rescue [:tuple [:= :action/rescue] Direction]]
+   [:action/rest [:tuple [:= :action/rest]]]
+   [:action/pivot [:tuple [:= :action/pivot]]]
+   [::m/default [:fn {:error/message "must be a vector starting with one of :action/walk :action/attack :action/shoot :action/rescue :action/rest :action/pivot"}
+                 (constantly false)]]])
+
+(defn action-error-text [action]
+  (when-let [explanation (m/explain Action action)]
+    (str "Invalid action " (pr-str action) ": "
+         (pr-str (me/humanize explanation)))))
+
+(defn end-with-error [state text]
+  (-> state
+      (add-message {:message/type :message.type/error
+                    :message/text text})
+      (assoc :state/game-over? true)))
 
 (defn map-units [f board]
   (mapv (fn [row]
@@ -140,34 +169,43 @@
         add-log-messages (fn [state]
                            (update state :state/messages (fn [messages]
                                                            (vec (concat messages @log-messages)))))
-
-        warrior-action (logged-warrior-action (get-public-state init-state))
-
-        ; TODO validate warrior-action
-
-        post-warrior-state (-> init-state
-                               increment-tick
-                               (store-warrior-action warrior-action)
-                               add-log-messages
-                               (take-warrior-action warrior-action))
-        post-env-state (-> post-warrior-state
-                           (store-warrior-action nil)
-                           remove-dead-units
-                           remove-rescued-captives)
-        post-npc-state (-> post-env-state
-                           take-npc-actions)
-        post-env2-state (-> post-npc-state
-                            reset-npc-actions
-                            check-warrior-dead
-                            check-warrior-stalled)]
-    (remove nil?
-            [post-warrior-state
-             (when (not= post-env-state post-warrior-state)
-               post-env-state)
-             (when (not= post-npc-state post-env-state)
-               post-npc-state)
-             (when (not= post-env2-state post-npc-state)
-               post-env2-state)])))
+        result (try
+                 {:action (logged-warrior-action (get-public-state init-state))}
+                 (catch #?(:clj Exception :cljs :default) error
+                   {:error (str "Your bot threw an error: "
+                                (or (ex-message error)
+                                    (str error)))}))
+        error-text (or (:error result)
+                       (action-error-text (:action result)))]
+    (if error-text
+      [(-> init-state
+           increment-tick
+           add-log-messages
+           (end-with-error error-text))]
+      (let [warrior-action (:action result)
+            post-warrior-state (-> init-state
+                                   increment-tick
+                                   (store-warrior-action warrior-action)
+                                   add-log-messages
+                                   (take-warrior-action warrior-action))
+            post-env-state (-> post-warrior-state
+                               (store-warrior-action nil)
+                               remove-dead-units
+                               remove-rescued-captives)
+            post-npc-state (-> post-env-state
+                               take-npc-actions)
+            post-env2-state (-> post-npc-state
+                                reset-npc-actions
+                                check-warrior-dead
+                                check-warrior-stalled)]
+        (remove nil?
+                [post-warrior-state
+                 (when (not= post-env-state post-warrior-state)
+                   post-env-state)
+                 (when (not= post-npc-state post-env-state)
+                   post-npc-state)
+                 (when (not= post-env2-state post-npc-state)
+                   post-env2-state)])))))
 
 (defn play-level [history users-code]
   (if (or
