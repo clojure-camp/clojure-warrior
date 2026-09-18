@@ -60,11 +60,13 @@
 ; modifiers
 
 (defn add-message [state message]
-  (update state :state/messages conj
-          (if (string? message)
-            {:message/type :message.type/system
-             :message/text message}
-            message)))
+  (let [message (if (string? message)
+                  {:message/type :message.type/system
+                   :message/text message}
+                  message)]
+    (update state :state/messages conj
+            (cond-> message
+              (contains? state :state/turn) (assoc :message/turn (:state/turn state))))))
 
 (defn set-at [state position value]
   (assoc-in state [:state/board (last position) (first position)] value))

@@ -32,6 +32,8 @@
 (defn generate-initial-level-state
   [level-description]
   {:state/messages [{:message/type :message.type/level-start
-                     :message/level level-description}]
+                     :message/level level-description
+                     :message/turn 0}]
    :state/board (extract-board (:level/board level-description))
-   :state/tick 0})
+   :state/tick 0
+   :state/turn 0})

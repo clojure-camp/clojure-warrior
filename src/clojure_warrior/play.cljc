@@ -157,34 +157,49 @@
   (let [[x y] (:unit/position (get-warrior (:state/board state)))]
     (assoc-in state [:state/board y x :unit/action] action)))
 
+(defn increment-turn [state]
+  (update state :state/turn inc))
+
+(defn add-turn-messages [state {:keys [input say-messages result]}]
+  (as-> state $
+    (add-message $ {:message/type :message.type/input
+                    :message/board input})
+    (reduce add-message $ say-messages)
+    (if (contains? result :action)
+      (add-message $ {:message/type :message.type/warrior-action
+                      :message/action (:action result)})
+      $)))
+
 (defn play-turn [init-state users-code]
-  (let [log-messages (atom [])
-        logged-warrior-action (fn [state]
-                                (binding [api/*say-listener*
-                                          (fn [text]
-                                            (swap! log-messages conj
-                                                   {:message/type :message.type/say
-                                                    :message/text text}))]
-                                  (users-code state)))
-        add-log-messages (fn [state]
-                           (update state :state/messages (fn [messages]
-                                                           (vec (concat messages @log-messages)))))
+  (let [say-messages (atom [])
+        input (get-public-state init-state)
         result (try
-                 {:action (logged-warrior-action (get-public-state init-state))}
+                 (binding [api/*say-listener*
+                           (fn [text]
+                             (swap! say-messages conj
+                                    {:message/type :message.type/say
+                                     :message/text text}))]
+                   {:action (users-code input)})
                  (catch #?(:clj Exception :cljs :default) error
                    {:error (str "Your bot threw an error: "
                                 (or (ex-message error)
                                     (str error)))}))
         error-text (or (:error result)
-                       (action-error-text (:action result)))]
+                       (action-error-text (:action result)))
+        add-log-messages (fn [state]
+                           (add-turn-messages state {:input input
+                                                     :say-messages @say-messages
+                                                     :result result}))]
     (if error-text
       [(-> init-state
            increment-tick
+           increment-turn
            add-log-messages
            (end-with-error error-text))]
       (let [warrior-action (:action result)
             post-warrior-state (-> init-state
                                    increment-tick
+                                   increment-turn
                                    (store-warrior-action warrior-action)
                                    add-log-messages
                                    (take-warrior-action warrior-action))
@@ -219,6 +234,16 @@
   (let [init-state [(extract/generate-initial-level-state level-definition)]]
     (play-level init-state users-code)))
 
+(defn continue-level-state [previous-state level-definition]
+  (let [turn (:state/turn previous-state)
+        level-state (extract/generate-initial-level-state level-definition)]
+    (-> level-state
+        (assoc :state/turn turn)
+        (assoc :state/messages (vec (concat (:state/messages previous-state)
+                                            (map (fn [message]
+                                                   (assoc message :message/turn turn))
+                                                 (:state/messages level-state))))))))
+
 (defn play-levels [level-definitions users-code]
   (let [history (reduce
                   (fn [memo level-definition]
@@ -226,15 +251,14 @@
                       memo
                       (concat memo
                               (play-level
-                                [(update (extract/generate-initial-level-state level-definition)
-                                         :state/messages (fn [messages]
-                                                           (vec (concat (:state/messages (last memo)) messages))))]
+                                [(continue-level-state (last memo) level-definition)]
                                 users-code))))
-                  [{:state/messages [{:message/type :message.type/system
-                                      :message/text "You enter the tower"}]}]
+                  [{:state/turn 0
+                    :state/messages [{:message/type :message.type/system
+                                      :message/text "You enter the tower"
+                                      :message/turn 0}]}]
                   level-definitions)]
     (if (:state/game-over? (last history))
       (vec history)
-      (update-in (vec history) [(dec (count history)) :state/messages]
-                 conj {:message/type :message.type/system
-                       :message/text "You have reached the top of the tower"}))))
+      (update (vec history) (dec (count history))
+              add-message "You have reached the top of the tower"))))

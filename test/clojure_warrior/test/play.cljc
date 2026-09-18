@@ -6,49 +6,49 @@
     [clojure-warrior.units :as units]))
 
 (defn message-texts [state]
-  (map :message/text (:state/messages state)))
+  (keep :message/text (:state/messages state)))
+
+(def init-state
+  {:state/board [[{:unit/type :unit.type/warrior
+                   :unit/health 10.0
+                   :unit/direction :direction/east}
+                  {:unit/type :unit.type/floor}]]
+   :state/messages []
+   :state/tick 0
+   :state/turn 0})
 
 (deftest play-turn
   (testing "play-turn"
-    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
-                                      :unit/health 10.0
-                                      :unit/direction :direction/east}
-                                     {:unit/type :unit.type/floor}]]
-                      :state/messages []
-                      :state/tick 0}
-          users-code (fn [board]
+    (let [users-code (fn [board]
                        [:action/walk :direction/forward])
           end-state (last (play/play-turn init-state users-code))]
       (is (= ["You walk forward"] (message-texts end-state)))
       (is (= 1 (:state/tick end-state)))
+      (is (= 1 (:state/turn end-state)))
       (is (= :unit.type/floor (get-in end-state [:state/board 0 0 :unit/type])))
       (is (= :unit.type/warrior (get-in end-state [:state/board 0 1 :unit/type])))))
 
-  (testing "say messages are added to the game report"
-    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
-                                      :unit/health 10.0
-                                      :unit/direction :direction/east}
-                                     {:unit/type :unit.type/floor}]]
-                      :state/messages []
-                      :state/tick 0}
-          users-code (fn [board]
+  (testing "input, say messages and output are added to the game report"
+    (let [users-code (fn [board]
                        (api/say {:health 10.0})
                        [:action/walk :direction/forward])
           end-state (last (play/play-turn init-state users-code))]
-      (is (= [{:message/type :message.type/say
-               :message/text "{:health 10.0}"}
+      (is (= [{:message/type :message.type/input
+               :message/board (play/get-public-state init-state)
+               :message/turn 1}
+              {:message/type :message.type/say
+               :message/text "{:health 10.0}"
+               :message/turn 1}
+              {:message/type :message.type/warrior-action
+               :message/action [:action/walk :direction/forward]
+               :message/turn 1}
               {:message/type :message.type/system
-               :message/text "You walk forward"}]
+               :message/text "You walk forward"
+               :message/turn 1}]
              (:state/messages end-state)))))
 
   (testing "bot throws"
-    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
-                                      :unit/health 10.0
-                                      :unit/direction :direction/east}
-                                     {:unit/type :unit.type/floor}]]
-                      :state/messages []
-                      :state/tick 0}
-          users-code (fn [board]
+    (let [users-code (fn [board]
                        (api/say :before-boom)
                        (throw (ex-info "boom" {})))
           states (play/play-turn init-state users-code)
@@ -56,38 +56,36 @@
       (is (= 1 (count states)))
       (is (= true (:state/game-over? end-state)))
       (is (= 1 (:state/tick end-state)))
+      (is (= 1 (:state/turn end-state)))
       (is (= (:state/board init-state) (:state/board end-state)))
-      (is (= [{:message/type :message.type/say
-               :message/text ":before-boom"}
+      (is (= [{:message/type :message.type/input
+               :message/board (play/get-public-state init-state)
+               :message/turn 1}
+              {:message/type :message.type/say
+               :message/text ":before-boom"
+               :message/turn 1}
               {:message/type :message.type/error
-               :message/text "Your bot threw an error: boom"}]
+               :message/text "Your bot threw an error: boom"
+               :message/turn 1}]
              (:state/messages end-state)))))
 
   (testing "bot returns an action without a direction"
-    (let [init-state {:state/board [[{:unit/type :unit.type/warrior
-                                      :unit/health 10.0
-                                      :unit/direction :direction/east}
-                                     {:unit/type :unit.type/floor}]]
-                      :state/messages []
-                      :state/tick 0}
-          users-code (fn [board]
+    (let [users-code (fn [board]
                        [:action/walk])
-          end-state (last (play/play-turn init-state users-code))]
+          end-state (last (play/play-turn init-state users-code))
+          [_input output error] (:state/messages end-state)]
       (is (= true (:state/game-over? end-state)))
-      (is (= :message.type/error
-             (:message/type (last (:state/messages end-state)))))
+      (is (= {:message/type :message.type/warrior-action
+              :message/action [:action/walk]
+              :message/turn 1}
+             output))
+      (is (= :message.type/error (:message/type error)))
       (is (re-find #"^Invalid action \[:action/walk\]: "
-                   (:message/text (last (:state/messages end-state)))))))
+                   (:message/text error)))))
 
   (testing "bot returns something that is not an action vector"
     (doseq [action [nil :action/walk "walk" [:action/fly :direction/forward]]]
-      (let [init-state {:state/board [[{:unit/type :unit.type/warrior
-                                        :unit/health 10.0
-                                        :unit/direction :direction/east}
-                                       {:unit/type :unit.type/floor}]]
-                        :state/messages []
-                        :state/tick 0}
-            users-code (fn [board]
+      (let [users-code (fn [board]
                          action)
             end-state (last (play/play-turn init-state users-code))]
         (is (= true (:state/game-over? end-state)))
@@ -113,12 +111,14 @@
                       [:action/walk :direction/forward])
           end-state (last (play/start-level level user-code))]
       (is (= {:message/type :message.type/level-start
-              :message/level level}
+              :message/level level
+              :message/turn 0}
              (first (:state/messages end-state))))
       (is (= ["You walk forward"
               "You walk forward"
               "You walk forward and up the stairs"]
-             (rest (message-texts end-state))))))
+             (message-texts end-state)))
+      (is (= 3 (:state/turn end-state)))))
 
   (testing "player death"
     (let [level {:level/id 1
@@ -132,7 +132,7 @@
               "You walk forward and bump into a wizard"
               "A wizard shoots you and you lose 9.0 health, down to 0.0"
               "You are dead. Game over."]
-             (rest (message-texts end-state)))))))
+             (message-texts end-state))))))
 
 (deftest play-levels
   (testing "play-levels"
@@ -144,8 +144,18 @@
             user-code (fn [board]
                         [:action/walk :direction/forward])
             end-state (last (play/play-levels levels user-code))]
-        (is (= [:message.type/system :message.type/level-start :message.type/system :message.type/level-start :message.type/system :message.type/system]
-               (map :message/type (:state/messages end-state))))
+        (is (= [[:message.type/system 0]
+                [:message.type/level-start 0]
+                [:message.type/input 1]
+                [:message.type/warrior-action 1]
+                [:message.type/system 1]
+                [:message.type/level-start 1]
+                [:message.type/input 2]
+                [:message.type/warrior-action 2]
+                [:message.type/system 2]
+                [:message.type/system 2]]
+               (map (juxt :message/type :message/turn) (:state/messages end-state))))
+        (is (= 2 (:state/turn end-state)))
         (is (= "You have reached the top of the tower"
                (:message/text (last (:state/messages end-state)))))))
 

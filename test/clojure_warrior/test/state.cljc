@@ -31,4 +31,12 @@
     (is (= {:state/messages [{:message/type :message.type/say
                               :message/text "hi"}]}
            (state/add-message {:state/messages []} {:message/type :message.type/say
-                                                    :message/text "hi"})))))
+                                                    :message/text "hi"}))))
+
+  (testing "stamps the turn when the state has one"
+    (is (= {:state/turn 3
+            :state/messages [{:message/type :message.type/system
+                              :message/text "hello"
+                              :message/turn 3}]}
+           (state/add-message {:state/messages []
+                               :state/turn 3} "hello")))))
