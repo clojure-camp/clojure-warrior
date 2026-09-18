@@ -83,6 +83,16 @@
       (is (re-find #"^Invalid action \[:action/walk\]: "
                    (:message/text error)))))
 
+  (testing "bot uses an action that the level does not allow"
+    (let [users-code (fn [board]
+                       [:action/attack :direction/forward])
+          end-state (last (play/play-turn (assoc init-state
+                                            :state/abilities #{:action/walk})
+                                          users-code))]
+      (is (= true (:state/game-over? end-state)))
+      (is (re-find #"is not available on this level"
+                   (:message/text (last (:state/messages end-state)))))))
+
   (testing "bot returns something that is not an action vector"
     (doseq [action [nil :action/walk "walk" [:action/fly :direction/forward]]]
       (let [users-code (fn [board]
@@ -101,7 +111,15 @@
   (is (nil? (play/action-error-text [:action/rescue :direction/backward])))
   (is (some? (play/action-error-text [:action/rest :direction/forward])))
   (is (some? (play/action-error-text [:action/walk :direction/north])))
-  (is (some? (play/action-error-text [:action/walk :direction/forward :extra]))))
+  (is (some? (play/action-error-text [:action/walk :direction/forward :extra])))
+
+  (testing "abilities"
+    (is (nil? (play/action-error-text [:action/walk :direction/forward]
+                                      #{:action/walk})))
+    (is (some? (play/action-error-text [:action/attack :direction/forward]
+                                       #{:action/walk})))
+    (is (some? (play/action-error-text [:action/rest]
+                                       #{:action/walk})))))
 
 (deftest start-level
   (testing "start-level"

@@ -26,10 +26,16 @@
    [::m/default [:fn {:error/message "must be a vector starting with one of :action/walk :action/attack :action/shoot :action/rescue :action/rest :action/pivot"}
                  (constantly false)]]])
 
-(defn action-error-text [action]
-  (when-let [explanation (m/explain Action action)]
-    (str "Invalid action " (pr-str action) ": "
-         (pr-str (me/humanize explanation)))))
+(defn action-error-text
+  ([action]
+   (action-error-text action nil))
+  ([action abilities]
+   (if-let [explanation (m/explain Action action)]
+     (str "Invalid action " (pr-str action) ": "
+          (pr-str (me/humanize explanation)))
+     (when (and abilities (not (contains? abilities (first action))))
+       (str "Invalid action " (pr-str action) ": "
+            (pr-str (first action)) " is not available on this level")))))
 
 (defn end-with-error [state text]
   (-> state
@@ -185,7 +191,8 @@
                                 (or (ex-message error)
                                     (str error)))}))
         error-text (or (:error result)
-                       (action-error-text (:action result)))
+                       (action-error-text (:action result)
+                                          (:state/abilities init-state)))
         add-log-messages (fn [state]
                            (add-turn-messages state {:input input
                                                      :say-messages @say-messages

@@ -35,5 +35,6 @@
                      :message/level level-description
                      :message/turn 0}]
    :state/board (extract-board (:level/board level-description))
+   :state/abilities (:level/abilities level-description)
    :state/tick 0
    :state/turn 0})
