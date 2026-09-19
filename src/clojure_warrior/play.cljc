@@ -100,6 +100,42 @@
         (add-message "You have taken too long. Game over."))
     state))
 
+(defn level-cleared? [state]
+  (empty? (api/listen (:state/board state))))
+
+(defn calculate-level-score [state]
+  (let [points (:state/level-points state 0)
+        time-bonus (max 0 (- (:state/time-bonus state 0) (:state/tick state)))
+        clear-bonus (if (level-cleared? state)
+                      (Math/round (* 0.2 (+ points time-bonus)))
+                      0)]
+    {:score/points points
+     :score/time-bonus time-bonus
+     :score/clear-bonus clear-bonus
+     :score/total (+ points time-bonus clear-bonus)}))
+
+(defn tally-level-score [state]
+  (let [score (calculate-level-score state)
+        previous-score (:state/score state 0)
+        new-score (+ previous-score (:score/total score))]
+    (as-> state $
+      (add-message $ (str "Level Score: " (:score/points score)))
+      (add-message $ (str "Time Bonus: " (:score/time-bonus score)))
+      (if (level-cleared? state)
+        (add-message $ (str "Clear Bonus: " (:score/clear-bonus score)))
+        $)
+      (add-message $ (str "Total Score: " previous-score " + " (:score/total score) " = " new-score))
+      (add-message $ {:message/type :message.type/level-score
+                      :message/score score})
+      (assoc $ :state/score new-score))))
+
+(defn check-level-passed [state]
+  (if (and
+        (warrior-at-stairs? state)
+        (not (:state/game-over? state)))
+    (tally-level-score state)
+    state))
+
 (defmulti take-enemy-action
   (fn [_state _enemy action]
     (first action)))
@@ -219,7 +255,8 @@
             post-env2-state (-> post-npc-state
                                 reset-npc-actions
                                 check-warrior-dead
-                                check-warrior-stalled)]
+                                check-warrior-stalled
+                                check-level-passed)]
         (remove nil?
                 [post-warrior-state
                  (when (not= post-env-state post-warrior-state)
@@ -246,6 +283,7 @@
         level-state (extract/generate-initial-level-state level-definition)]
     (-> level-state
         (assoc :state/turn turn)
+        (assoc :state/score (:state/score previous-state 0))
         (assoc :state/messages (vec (concat (:state/messages previous-state)
                                             (map (fn [message]
                                                    (assoc message :message/turn turn))
@@ -261,6 +299,7 @@
                                 [(continue-level-state (last memo) level-definition)]
                                 users-code))))
                   [{:state/turn 0
+                    :state/score 0
                     :state/messages [{:message/type :message.type/system
                                       :message/text "You enter the tower"
                                       :message/turn 0}]}]

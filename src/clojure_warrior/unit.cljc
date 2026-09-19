@@ -5,10 +5,23 @@
                                    first-unit-in-range
                                    action-target-position
                                    add-message
+                                   add-points
                                    set-at
-                                   assoc-at
-                                   update-at]]
+                                   assoc-at]]
     [clojure-warrior.units :as units]))
+
+(defn damage-unit [state target damage action-text]
+  (let [target-new-health (max 0 (- (:unit/health target) damage))
+        message-text (str action-text " and a " (name (:unit/type target)) " takes " damage " damage, ")]
+    (if (< 0 target-new-health)
+      (-> state
+          (add-message (str message-text "and has " target-new-health " health left"))
+          (assoc-at (:unit/position target) :unit/health target-new-health))
+      (let [points (long (:unit/max-health target))]
+        (-> state
+            (add-message (str message-text "and dies. You earn " points " points."))
+            (assoc-at (:unit/position target) :unit/health target-new-health)
+            (add-points points))))))
 
 (defmulti take-warrior-action
   "Returns new state after performing warrior action"
@@ -71,17 +84,9 @@
                            :direction/backward 0.5)
         attack-power (* (:unit/attack-power warrior) power-multiplier)
         action-text (str "You attack " (name direction))]
-    (as-> state $
-      (if (and target (:unit/health target))
-        (let [damage (min attack-power (:unit/health target))
-              target-new-health (max 0 (- (:unit/health target) damage))]
-          (-> $
-              (add-message (str action-text " and a " (name (:unit/type target)) " takes " damage " damage, "
-                                (if (< 0 target-new-health)
-                                  (str "and has " target-new-health " health left")
-                                  "and dies")))
-              (assoc-at target-position :unit/health target-new-health)))
-        (add-message $ (str action-text " but you hit nothing"))))))
+    (if (and target (:unit/health target))
+      (damage-unit state target (min attack-power (:unit/health target)) action-text)
+      (add-message state (str action-text " but you hit nothing")))))
 
 (defmethod take-warrior-action :action/shoot
   [state [_ direction]]
@@ -89,18 +94,9 @@
         target (first-unit-in-range (:state/board state) warrior direction 2)
         attack-power (:unit/shoot-power warrior)
         action-text (str "You shoot " (name direction))]
-    (as-> state $
-      (if (and target (:unit/health target))
-        (let [damage (min attack-power (:unit/health target))
-              target-new-health (max 0 (- (:unit/health target) damage))]
-          (-> $
-              (add-message (str action-text " and a " (name (:unit/type target)) " takes " damage " damage, "
-                                (if (< 0 target-new-health)
-                                  (str "and has " target-new-health " health left")
-                                  "and dies")))
-              (assoc-at (:unit/position target) :unit/health target-new-health)))
-        (-> $
-            (add-message (str action-text " but you hit nothing")))))))
+    (if (and target (:unit/health target))
+      (damage-unit state target (min attack-power (:unit/health target)) action-text)
+      (add-message state (str action-text " but you hit nothing")))))
 
 (defmethod take-warrior-action :action/rescue
   [state [_ direction]]
@@ -112,6 +108,5 @@
         (-> $
             (add-message (str action-text " and unbind a captive. You earn 20 points."))
             (assoc-at (:unit/position target) :unit/rescued? true)
-            (update-at (:unit/position warrior) :unit/points (fn [points]
-                                                               (+ (or points 0) 20))))
+            (add-points 20))
         (add-message $ (str action-text " but there is no captive to rescue"))))))

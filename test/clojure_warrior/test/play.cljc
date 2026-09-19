@@ -2,8 +2,14 @@
   (:require
     [clojure.test :refer [deftest testing is]]
     [clojure-warrior.api :as api]
+    [clojure-warrior.levels :as levels]
     [clojure-warrior.play :as play]
     [clojure-warrior.units :as units]))
+
+(defn attack-or-walk [board]
+  (if (:unit/enemy? (api/feel board :direction/forward))
+    [:action/attack :direction/forward]
+    [:action/walk :direction/forward]))
 
 (defn message-texts [state]
   (keep :message/text (:state/messages state)))
@@ -134,7 +140,11 @@
              (first (:state/messages end-state))))
       (is (= ["You walk forward"
               "You walk forward"
-              "You walk forward and up the stairs"]
+              "You walk forward and up the stairs"
+              "Level Score: 0"
+              "Time Bonus: 0"
+              "Clear Bonus: 0"
+              "Total Score: 0 + 0 = 0"]
              (message-texts end-state)))
       (is (= 3 (:state/turn end-state)))))
 
@@ -167,10 +177,20 @@
                 [:message.type/input 1]
                 [:message.type/warrior-action 1]
                 [:message.type/system 1]
+                [:message.type/system 1]
+                [:message.type/system 1]
+                [:message.type/system 1]
+                [:message.type/system 1]
+                [:message.type/level-score 1]
                 [:message.type/level-start 1]
                 [:message.type/input 2]
                 [:message.type/warrior-action 2]
                 [:message.type/system 2]
+                [:message.type/system 2]
+                [:message.type/system 2]
+                [:message.type/system 2]
+                [:message.type/system 2]
+                [:message.type/level-score 2]
                 [:message.type/system 2]]
                (map (juxt :message/type :message/turn) (:state/messages end-state))))
         (is (= 2 (:state/turn end-state)))
@@ -186,8 +206,95 @@
                         [:action/attack :direction/forward])
             end-state (last (play/play-levels levels user-code))]
         (is (= true (:state/game-over? end-state)))
+        (is (= 0 (:state/score end-state)))
         (is (= "You are dead. Game over."
-               (:message/text (last (:state/messages end-state)))))))))
+               (:message/text (last (:state/messages end-state)))))))
+
+    (testing "score accumulates across levels"
+      (let [levels [{:level/id 1
+                     :level/time-bonus 5
+                     :level/board [[:*> :__]]}
+                    {:level/id 2
+                     :level/time-bonus 5
+                     :level/board [[:*> :<s :__]]}]
+            end-state (last (play/play-levels levels attack-or-walk))]
+        ;; level 1: 1 turn -> time bonus 4, clear bonus round(0.8) = 1
+        ;; level 2: 5 turns -> 12 points, time bonus 0, clear bonus round(2.4) = 2
+        (is (= 19 (:state/score end-state)))
+        (is (= ["Total Score: 0 + 5 = 5"
+                "Total Score: 5 + 14 = 19"]
+               (filter (fn [text]
+                         (re-find #"^Total Score" text))
+                       (message-texts end-state))))))))
+
+(deftest level-score
+  (testing "passing a level tallies points, time bonus and clear bonus"
+    (let [level {:level/id 1
+                 :level/time-bonus 10
+                 :level/board [[:*> :<s :__]]}
+          end-state (last (play/start-level level attack-or-walk))]
+      ;; 3 attacks + 2 walks
+      (is (= 5 (:state/tick end-state)))
+      (is (= 12 (:state/level-points end-state)))
+      (is (= ["Level Score: 12"
+              "Time Bonus: 5"
+              "Clear Bonus: 3"
+              "Total Score: 0 + 20 = 20"]
+             (take-last 4 (message-texts end-state))))
+      (is (= {:message/type :message.type/level-score
+              :message/score {:score/points 12
+                              :score/time-bonus 5
+                              :score/clear-bonus 3
+                              :score/total 20}
+              :message/turn 5}
+             (last (:state/messages end-state))))
+      (is (= 20 (:state/score end-state)))))
+
+  (testing "no clear bonus when a captive is left behind"
+    (let [level {:level/id 1
+                 :level/time-bonus 3
+                 :level/board [[:*> :__ :<C]]}
+          end-state (last (play/start-level level attack-or-walk))]
+      (is (= ["Level Score: 0"
+              "Time Bonus: 2"
+              "Total Score: 0 + 2 = 2"]
+             (take-last 3 (message-texts end-state))))
+      (is (= 0 (get-in (last (:state/messages end-state)) [:message/score :score/clear-bonus])))
+      (is (= 2 (:state/score end-state)))))
+
+  (testing "time bonus does not go below zero"
+    (let [level {:level/id 1
+                 :level/time-bonus 1
+                 :level/board [[:*> nil nil :__]]}
+          end-state (last (play/start-level level attack-or-walk))]
+      (is (= 3 (:state/tick end-state)))
+      (is (= 0 (get-in (last (:state/messages end-state)) [:message/score :score/time-bonus])))
+      (is (= 0 (:state/score end-state)))))
+
+  (testing "no score when the warrior dies"
+    (let [level {:level/id 1
+                 :level/time-bonus 10
+                 :level/board [[:*> :<w :__]]}
+          end-state (last (play/start-level level (fn [board]
+                                                    [:action/walk :direction/forward])))]
+      (is (= true (:state/game-over? end-state)))
+      (is (= 0 (:state/score end-state)))
+      (is (empty? (filter (fn [message]
+                            (= :message.type/level-score (:message/type message)))
+                          (:state/messages end-state))))))
+
+  (testing "matches the ace scores of the real levels"
+    (let [history (play/play-levels (take 2 levels/levels) attack-or-walk)
+          level-scores (->> history
+                            last
+                            :state/messages
+                            (filter (fn [message]
+                                      (= :message.type/level-score (:message/type message))))
+                            (map (fn [message]
+                                   (get-in message [:message/score :score/total]))))]
+      (is (= (map :level/ace-score (take 2 levels/levels))
+             level-scores))
+      (is (= 36 (:state/score (last history)))))))
 
 (deftest get-public-unit
   (let [private-unit (assoc (:unit.type/archer units/reference)

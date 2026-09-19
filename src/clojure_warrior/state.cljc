@@ -68,6 +68,9 @@
             (cond-> message
               (contains? state :state/turn) (assoc :message/turn (:state/turn state))))))
 
+(defn add-points [state points]
+  (update state :state/level-points (fnil + 0) points))
+
 (defn set-at [state position value]
   (assoc-in state [:state/board (last position) (first position)] value))
 

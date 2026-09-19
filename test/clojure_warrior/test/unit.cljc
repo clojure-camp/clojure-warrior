@@ -151,11 +151,12 @@
                             :state/messages (system-messages "You attack forward and a whatever takes 5.0 damage, and has 5.0 health left")}]
         (is (= expected-state (unit/take-warrior-action state action)))))
 
-    (testing "can kill a unit"
+    (testing "can kill a unit, earning its max health as points"
       (let [state {:state/board [[{:unit/type :unit.type/warrior
                                    :unit/attack-power 5.0
                                    :unit/direction :direction/east}
                                   {:unit/type :whatever
+                                   :unit/max-health 12.0
                                    :unit/health 5.0}]]
                    :state/messages []}
             action [:action/attack :direction/forward]
@@ -163,8 +164,10 @@
                                             :unit/attack-power 5.0
                                             :unit/direction :direction/east}
                                            {:unit/type :whatever
+                                            :unit/max-health 12.0
                                             :unit/health 0.0}]]
-                            :state/messages (system-messages "You attack forward and a whatever takes 5.0 damage, and dies")}]
+                            :state/level-points 12
+                            :state/messages (system-messages "You attack forward and a whatever takes 5.0 damage, and dies. You earn 12 points.")}]
         (is (= expected-state (unit/take-warrior-action state action)))))
 
     (testing "can attack backward (at 50% reduced strength)"
@@ -269,6 +272,26 @@
                               :state/messages (system-messages "You shoot backward and a whatever takes 3.0 damage, and has 7.0 health left")}]
           (is (= expected-state (unit/take-warrior-action state action)))))
 
+      (testing "can kill a unit, earning its max health as points"
+        (let [state {:state/board [[{:unit/type :unit.type/warrior
+                                     :unit/shoot-power 3.0
+                                     :unit/direction :direction/east}
+                                    {:unit/type :whatever
+                                     :unit/max-health 3.0
+                                     :unit/health 2.0}]]
+                     :state/level-points 20
+                     :state/messages []}
+              action [:action/shoot :direction/forward]
+              expected-state {:state/board [[{:unit/type :unit.type/warrior
+                                              :unit/shoot-power 3.0
+                                              :unit/direction :direction/east}
+                                             {:unit/type :whatever
+                                              :unit/max-health 3.0
+                                              :unit/health 0.0}]]
+                              :state/level-points 23
+                              :state/messages (system-messages "You shoot forward and a whatever takes 2.0 damage, and dies. You earn 3 points.")}]
+          (is (= expected-state (unit/take-warrior-action state action)))))
+
       (testing "shooting object without health has no effect"
         (let [state {:state/board [[{:unit/type :unit.type/warrior
                                      :unit/shoot-power 5.0
@@ -287,43 +310,40 @@
     (testing "receives 20 points; captive is marked rescued"
       (testing "can rescue forward"
         (let [state {:state/board [[{:unit/type :unit.type/warrior
-                                     :unit/points 0.0
                                      :unit/direction :direction/east}
                                     {:unit/type :unit.type/captive}]]
                      :state/messages []}
               action [:action/rescue :direction/forward]
               expected-state {:state/board [[{:unit/type :unit.type/warrior
-                                              :unit/points 20.0
                                               :unit/direction :direction/east}
                                              {:unit/type :unit.type/captive
                                               :unit/rescued? true}]]
+                              :state/level-points 20
                               :state/messages (system-messages "You reach forward and unbind a captive. You earn 20 points.")}]
           (is (= expected-state (unit/take-warrior-action state action)))))
 
       (testing "can rescue backward"
         (let [state {:state/board [[{:unit/type :unit.type/warrior
-                                     :unit/points 0.0
                                      :unit/direction :direction/west}
                                     {:unit/type :unit.type/captive}]]
+                     :state/level-points 5
                      :state/messages []}
               action [:action/rescue :direction/backward]
               expected-state {:state/board [[{:unit/type :unit.type/warrior
-                                              :unit/points 20.0
                                               :unit/direction :direction/west}
                                              {:unit/type :unit.type/captive
                                               :unit/rescued? true}]]
+                              :state/level-points 25
                               :state/messages (system-messages "You reach backward and unbind a captive. You earn 20 points.")}]
           (is (= expected-state (unit/take-warrior-action state action))))))
 
     (testing "if not a captive, no effect"
       (let [state {:state/board [[{:unit/type :unit.type/warrior
-                                   :unit/points 0.0
                                    :unit/direction :direction/east}
                                   {:unit/type :whatever}]]
                    :state/messages []}
             action [:action/rescue :direction/forward]
             expected-state {:state/board [[{:unit/type :unit.type/warrior
-                                            :unit/points 0.0
                                             :unit/direction :direction/east}
                                            {:unit/type :whatever}]]
                             :state/messages (system-messages "You reach forward but there is no captive to rescue")}]
