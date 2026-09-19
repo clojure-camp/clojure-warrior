@@ -6,7 +6,7 @@
     :level/tip "Return [:action/walk :direction/forward] from play-turn to walk forward."
     :level/time-bonus 15
     :level/ace-score 10
-    :level/board [[:*> nil nil nil nil nil nil :__]]
+    :level/board [[:*> nil nil nil nil nil nil :__ nil nil nil]]
     :level/abilities #{:action/walk}}
 
    {:level/id 2
@@ -15,7 +15,7 @@
     :level/clue "Add an if condition on (:unit/enemy? (feel board :direction/forward)) to decide whether to attack or walk."
     :level/time-bonus 20
     :level/ace-score 26
-    :level/board [[:*> nil nil nil :<s nil nil :__]]
+    :level/board [[:*> nil nil nil :<s nil nil :__ nil nil nil]]
     :level/abilities #{:action/walk :action/attack}}
 
    {:level/id 3
@@ -24,7 +24,7 @@
     :level/clue "When there is no enemy ahead of you, rest until your health is full before walking forward."
     :level/time-bonus 35
     :level/ace-score 71
-    :level/board [[:*> nil :<s nil :<s :<s nil :<s :__]]
+    :level/board [[:*> nil :<s nil :<s :<s nil :<s :__ nil nil]]
     :level/abilities #{:action/walk :action/attack :action/rest}}
 
    {:level/id 4
@@ -33,7 +33,7 @@
     :level/clue "Reset the atom to your current health at the end of each turn. If the stored health is greater than your current health, you are taking damage and should not rest."
     :level/time-bonus 45
     :level/ace-score 90
-    :level/board [[:*> nil :<S :<a nil :<S :__]]
+    :level/board [[:*> nil :<S :<a nil :<S :__ nil nil nil nil]]
     :level/abilities #{:action/walk :action/attack :action/rest}}
 
    {:level/id 5
@@ -42,7 +42,7 @@
     :level/clue "Don't forget to constantly check if you're taking damage. Rest until your health is full when you are not taking damage."
     :level/time-bonus 45
     :level/ace-score 123
-    :level/board [[:*> nil :<C :<a :<a :<S :<C :__]]
+    :level/board [[:*> nil :<C :<a :<a :<S :<C :__ nil nil nil]]
     :level/abilities #{:action/walk :action/attack :action/rest :action/rescue}}
 
    {:level/id 6
@@ -51,7 +51,7 @@
     :level/clue "Walk backward if you are taking damage from afar and do not have enough health to attack. You may also want to walk backward until (= :unit.type/wall (:unit/type (feel board :direction/backward)))."
     :level/time-bonus 45
     :level/ace-score 90
-    :level/board [[:C> nil :*> nil :<S nil :<a :<a :__]]
+    :level/board [[:C> nil :*> nil :<S nil :<a :<a :__ nil nil]]
     :level/abilities #{:action/walk :action/attack :action/rest :action/rescue}}
 
    {:level/id 7
@@ -59,7 +59,7 @@
     :level/tip "You are not as effective at attacking backward. Check for (= :unit.type/wall (:unit/type (feel board :direction/forward))) and return [:action/pivot] to turn around."
     :level/time-bonus 30
     :level/ace-score 50
-    :level/board [[:__ :a> nil :S> nil :*>]]
+    :level/board [[nil nil nil nil nil :__ :a> nil :S> nil :*>]]
     :level/abilities #{:action/walk :action/attack :action/rest :action/rescue :action/pivot}}
 
    {:level/id 8
@@ -68,7 +68,7 @@
     :level/clue "Wizards are deadly but low in health. Shoot them before they have time to attack."
     :level/time-bonus 20
     :level/ace-score 46
-    :level/board [[:*> nil nil :<C :<w :<w :__]]
+    :level/board [[:*> nil nil :<C :<w :<w :__ nil nil nil nil]]
     :level/abilities #{:action/walk :action/attack :action/rest :action/rescue :action/pivot :action/shoot}}
 
    {:level/id 9
