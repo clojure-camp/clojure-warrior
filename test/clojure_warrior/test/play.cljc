@@ -105,7 +105,7 @@
                          action)
             end-state (last (play/play-turn init-state users-code))]
         (is (= true (:state/game-over? end-state)))
-        (is (re-find #"must be a vector starting with one of"
+        (is (re-find #"must be a vector starting with"
                      (:message/text (last (:state/messages end-state)))))))))
 
 (deftest action-error-text
@@ -225,7 +225,26 @@
                 "Total Score: 5 + 14 = 19"]
                (filter (fn [text]
                          (re-find #"^Total Score" text))
-                       (message-texts end-state))))))))
+                       (message-texts end-state))))))
+
+    (testing "check-abilities? flag"
+      (let [levels [{:level/id 1
+                     :level/abilities #{:action/walk}
+                     :level/board [[:*> :<s :__]]}
+                    {:level/id 2
+                     :level/abilities #{:action/walk}
+                     :level/board [[:*> :<s :__]]}]]
+        (testing "checks abilities by default"
+          (let [end-state (last (play/play-levels levels attack-or-walk))]
+            (is (= true (:state/game-over? end-state)))
+            (is (re-find #"is not available on this level"
+                         (:message/text (last (:state/messages end-state)))))))
+        (testing "skips ability check on every level when disabled"
+          (let [end-state (last (play/play-levels levels attack-or-walk
+                                                  {:check-abilities? false}))]
+            (is (nil? (:state/game-over? end-state)))
+            (is (= "You have reached the top of the tower"
+                   (:message/text (last (:state/messages end-state)))))))))))
 
 (deftest level-score
   (testing "passing a level tallies points, time bonus and clear bonus"

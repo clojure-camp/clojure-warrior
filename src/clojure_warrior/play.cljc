@@ -23,7 +23,7 @@
    [:action/rescue [:tuple [:= :action/rescue] Direction]]
    [:action/rest [:tuple [:= :action/rest]]]
    [:action/pivot [:tuple [:= :action/pivot]]]
-   [::m/default [:fn {:error/message "must be a vector starting with one of :action/walk :action/attack :action/shoot :action/rescue :action/rest :action/pivot"}
+   [::m/default [:fn {:error/message "must be a vector starting with a permitted action (ex. :action/walk)"}
                  (constantly false)]]])
 
 (defn action-error-text
@@ -228,7 +228,8 @@
                                     (str error)))}))
         error-text (or (:error result)
                        (action-error-text (:action result)
-                                          (:state/abilities init-state)))
+                                          (when (get init-state :state/check-abilities? true)
+                                            (:state/abilities init-state))))
         add-log-messages (fn [state]
                            (add-turn-messages state {:input input
                                                      :say-messages @say-messages
@@ -284,27 +285,32 @@
     (-> level-state
         (assoc :state/turn turn)
         (assoc :state/score (:state/score previous-state 0))
+        (assoc :state/check-abilities? (get previous-state :state/check-abilities? true))
         (assoc :state/messages (vec (concat (:state/messages previous-state)
                                             (map (fn [message]
                                                    (assoc message :message/turn turn))
                                                  (:state/messages level-state))))))))
 
-(defn play-levels [level-definitions users-code]
-  (let [history (reduce
-                  (fn [memo level-definition]
-                    (if (:state/game-over? (last memo))
-                      memo
-                      (concat memo
-                              (play-level
-                                [(continue-level-state (last memo) level-definition)]
-                                users-code))))
-                  [{:state/turn 0
-                    :state/score 0
-                    :state/messages [{:message/type :message.type/system
-                                      :message/text "You enter the tower"
-                                      :message/turn 0}]}]
-                  level-definitions)]
-    (if (:state/game-over? (last history))
-      (vec history)
-      (update (vec history) (dec (count history))
-              add-message "You have reached the top of the tower"))))
+(defn play-levels
+  ([level-definitions users-code]
+   (play-levels level-definitions users-code {}))
+  ([level-definitions users-code {:keys [check-abilities?] :or {check-abilities? true}}]
+   (let [history (reduce
+                   (fn [memo level-definition]
+                     (if (:state/game-over? (last memo))
+                       memo
+                       (concat memo
+                               (play-level
+                                 [(continue-level-state (last memo) level-definition)]
+                                 users-code))))
+                   [{:state/turn 0
+                     :state/score 0
+                     :state/check-abilities? check-abilities?
+                     :state/messages [{:message/type :message.type/system
+                                       :message/text "You enter the tower"
+                                       :message/turn 0}]}]
+                   level-definitions)]
+     (if (:state/game-over? (last history))
+       (vec history)
+       (update (vec history) (dec (count history))
+               add-message "You have reached the top of the tower")))))
